@@ -1,115 +1,76 @@
-# QJsonHelper
+# QJsonSerializable
 
-`QJsonHelper` is a lightweight Qt library designed for fast and convenient conversion between `QObject` instances and JSON data.
+一个强大且轻量级的 Qt C++ JSON 序列化与 QML 属性增强库。它不仅让你摆脱手动编写冗长的 `fromJson` 和 `toJson` 的烦恼，更提供了丰富的宏定义，一键实现属性与 QML 的双向绑定及高级数据结构的封装。
 
-## Features
+## 核心特性
 
-*   **Object to JSON**: Automatically convert properties of a `QObject` into `QJsonObject`, JSON string, or `QVariantMap`.
-*   **JSON to Object**: Automatically populate `QObject` properties from a JSON string or `QJsonObject`.
-*   **File Persistence**: Convenient methods to save object state to or load from local files.
-*   **Smart Property Handling**: Recognizes Qt's `Q_PROPERTY` and allows ignoring specific properties (defaults to ignoring `objectName`).
-*   **QML Support**: Includes powerful macros for seamless integration with QML data models.
+- **继承即用**：C++ 类继承 `QJsonSerializable`，自动获得与 JSON 的双向序列化/反序列化能力。
+- **丰富的属性宏**：支持快速生成带有 `READ`, `WRITE`, `NOTIFY` 的规范 Qt 属性。
+- **QML 列表属性全自动映射**：使用 `Q_PROPERTY_QMLLIST` 等宏，一键将 C++ 的对象列表 `QList<T*>` 封装为 QML 友好的 `QJsonArray` 并提供开箱即用的增删改查（CRUD）接口。
+- **无感知的 JSON 同步**：提供如 `Q_PROPERTY_QML` 的能力，当你在 QML 中设置属性时，自动映射并反序列化回底层 C++ 对象。
 
-## Requirements
+## 如何接入
 
-*   Qt 5.0 or higher
-*   C++11 or higher
-
-## Installation
-
-Add the source code to your project directory and include `QJsonHelper.pri` in your `.pro` file:
-
-```pro
-include(path/to/QJsonHelper/QJsonHelper.pri)
+直接在您的 `.pro` 或 `.pri` 工程文件中 include 本模块即可：
+```qmake
+include($$PWD/QJsonSerializable/QJsonSerializable.pri)
 ```
 
-## Usage Examples
+## 使用示例
 
-### 1. Inherit from QJsonHelper
-
-By inheriting from `QJsonHelper`, your class gains JSON serialization capabilities directly.
-
+### 1. 基础属性宏 (替代手写冗长的 Getter/Setter)
 ```cpp
-#include "qjsonhelper.h"
+#include "qpropertyex.h"
 
-class UserInfo : public QJsonHelper {
+class MyData : public QObject {
     Q_OBJECT
-    Q_PROPERTY(QString name READ name WRITE setName)
-    Q_PROPERTY(int age READ age WRITE setAge)
+    // 自动生成 m_id, id(), setId(), idChanged() 信号
+    Q_PROPERTY_AUTO(int, id)
+    Q_PROPERTY_AUTO(QString, name)
+};
+```
 
-public:
-    explicit UserInfo(QObject *parent = nullptr) : QJsonHelper(parent) {}
-    
-    // Getters and Setters...
-    QString name() const { return m_name; }
-    void setName(const QString &n) { m_name = n; }
-    int age() const { return m_age; }
-    void setAge(int a) { m_age = a; }
+### 2. 结合 JSON 的自动序列化
+```cpp
+#include "qjsonserializable.h"
 
-private:
-    QString m_name;
-    int m_age;
+class UserInfo : public QJsonSerializable {
+    Q_OBJECT
+    Q_PROPERTY_AUTO(QString, username)
+    Q_PROPERTY_AUTO(int, age)
 };
 
-// Usage
+// 序列化
 UserInfo user;
-user.setName("Alice");
-user.setAge(25);
+user.setusername("Admin");
+user.setage(25);
+QJsonObject json = user.jsonObject();
 
-// Serialization
-QString jsonStr = user.json();
-user.save("user_config.json");
-
-// Deserialization
-UserInfo newUser;
-newUser.load("user_config.json");
+// 反序列化
+UserInfo user2;
+user2.fromJsonValue(json);
 ```
 
-### 2. Using Static Helper QObjectHelper
-
-If you don't want to modify inheritance, use `QObjectHelper` directly.
-
-```cpp
-#include "qobjecthelper.h"
-
-CustomObject obj;
-// ... set properties ...
-
-// Convert to JSON
-QJsonObject json = QObjectHelper::qobject2qjsonobject(&obj);
-
-// Load from JSON
-QString jsonContent = "{\"name\": \"Bob\", \"age\": 30}";
-QObjectHelper::json2qobject(jsonContent, &obj);
-```
-
-### 3. QML Integration with Advanced Macros
-
-Use `qpropertyex.h` for advanced data model synchronization.
+### 3. 高级 QML 列表绑定 (`Q_PROPERTY_QMLLIST`)
+对于需要在 QML 中展示表格并进行持久化的场景，手动写 `QQmlListProperty` 会非常繁琐，本库提供 `Q_PROPERTY_QMLLIST` 宏解决痛点：
 
 ```cpp
-class MyListModel : public QJsonHelper {
+class UserListModel : public QObject {
     Q_OBJECT
-    // Generates JSON array sync and CRUD methods for QML
-    Q_PROPERTY_QMLLIST(ChildItem, children)
-    
-public:
-    explicit MyListModel(QObject *parent = nullptr) : QJsonHelper(parent) {}
+    // 自动维护一个 QList<UserInfo*>，并在 QML 中暴露为 JsonArray，
+    // 同时提供 usersCount(), usersGetAt(), usersAppend(), usersRemove() 等接口
+    Q_PROPERTY_QMLLIST(UserInfo, users)
 };
 ```
+在 QML 中可以直接如此调用：
+```qml
+// 获取用户列表长度
+console.log(model.usersCount())
+// 追加一个新用户 (传入 JS 对象)
+model.usersAppend({ "username": "NewUser", "age": 20 })
+```
 
-## Core API
-
-### QJsonHelper Class
-*   `QString json()`: Get object as JSON string.
-*   `QJsonObject jsonObject()`: Get object as `QJsonObject`.
-*   `bool save(const QString& fpath)`: Save object to file.
-*   `bool load(const QString& fpath)`: Load object from file.
-
-### QObjectHelper Class (Static)
-*   `static QString qobject2json(const QObject* object, ...)`
-*   `static void json2qobject(const QString& json, QObject* object)`
-
-## License
-
-This project follows the Open Source License. See `LICENSE` file for details (if applicable).
+## 适用场景
+- **工业软件 / 配置编辑器**：参数的保存、加载以及在界面上的双向同步。
+- **网络接口映射**：接收后端的 JSON 数据，直接由框架转换为强类型 C++ 对象列表。
+- **QML 前端展示**：自动化的信号绑定机制，让你完全不需要手写 boilerplate 代码。

@@ -7,3 +7,5 @@ HEADERS += \
 SOURCES += \
     $$PWD/qjsonserializable.cpp \
     $$PWD/qobjecthelper.cpp
+
+INCLUDEPATH += $$PWD/

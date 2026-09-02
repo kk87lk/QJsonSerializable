@@ -10,73 +10,6 @@
 #include <QFile>
 #include <QDebug>
 
-#include "qjsonserializable.h"
-/**
-* @brief Class used to convert QObject into QVariant and vivce-versa.
-* During these operations only the class attributes defined as properties will
-* be considered.
-* Properties marked as 'non-stored' will be ignored.
-*
-* Suppose the declaration of the Person class looks like this:
-* \code
-* class Person : public QObject
-{
-  Q_OBJECT
-
-  Q_PROPERTY(QString name READ name WRITE setName)
-  Q_PROPERTY(int phoneNumber READ phoneNumber WRITE setPhoneNumber)
-  Q_PROPERTY(Gender gender READ gender WRITE setGender)
-  Q_PROPERTY(QDate dob READ dob WRITE setDob)
-  Q_ENUMS(Gender)
-
- public:
-    Person(QObject* parent = 0);
-    ~Person();
-
-    QString name() const;
-    void setName(const QString& name);
-
-    int phoneNumber() const;
-    void setPhoneNumber(const int  phoneNumber);
-
-    enum Gender {Male, Female};
-    void setGender(Gender gender);
-    Gender gender() const;
-
-    QDate dob() const;
-    void setDob(const QDate& dob);
-
-  private:
-    QString m_name;
-    int m_phoneNumber;
-    Gender m_gender;
-    QDate m_dob;
-};
-\endcode
-
-The following code will serialize an instance of Person to JSON :
-
-\code
-    Person person;
-    person.setName("Flavio");
-    person.setPhoneNumber(123456);
-    person.setGender(Person::Male);
-    person.setDob(QDate(1982, 7, 12));
-
-    QString  result = QObjectHelper::qobject2json(&person);
-    QObjectHelper::json2qobject(result, &person);
-    qDebug() << result
-    qDebug() << person;
-\endcode
-
-The generated output will be:
-\code
-    "{\n    \"dob\": \"1982-07-12\",\n    \"gender\": 0,\n    \"name\": \"Flavio\",\n    \"phoneNumber\": 123456\n}\n"
-    Person({"name":"Flavio","phoneNumber":"123456","gender":"0","dob":"1982-07-12"})
-\endcode
-*/
-
-
 class QObjectHelper::QObjectHelperPrivate {
 };
 
@@ -216,8 +149,8 @@ void QObjectHelper::qjsonobject2qobject(const QJsonObject& jsonobj, QObject* obj
             continue;
         }
         QMetaProperty metaproperty = metaobject->property(pIdx);
-        QMetaType metaType(static_cast<int>(metaproperty.type()));
-        int type = metaType.id();
+        const QMetaType metaType = metaproperty.metaType();
+        const int type = metaType.id();
         QJsonValue val = iter.value();
         QVariant v(iter.value());
         // 传入其中所有的UserType 都继承QJsonSerializable类
@@ -228,7 +161,7 @@ void QObjectHelper::qjsonobject2qobject(const QJsonObject& jsonobj, QObject* obj
 
             /// @brief 对象字段优先走属性专用 FromJson。
             ///属性为 Q_PROPERTY_LIST_AUTO
-            if (type >= QMetaType::User){
+            if (type >= QMetaType::User || type == QMetaType::UnknownType){
                 QByteArray methodName = iter.key().toLatin1() + "FromJson";
                 bool ok = QMetaObject::invokeMethod(object, methodName.constData(),Q_ARG(QJsonArray, jsonArray));
                 if (ok) {
@@ -294,7 +227,7 @@ void QObjectHelper::qjsonobject2qobject(const QJsonObject& jsonobj, QObject* obj
             v.convert(type);
             metaproperty.write(object, v);
         }else{
-            qDebug()<<"xdr"<<"序列化错误"<<metaproperty.name()<<type<<val;
+            qDebug()<<"序列化错误"<<metaproperty.name()<<type<<val;
         }
     }
 }

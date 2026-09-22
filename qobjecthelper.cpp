@@ -149,7 +149,11 @@ void QObjectHelper::qjsonobject2qobject(const QJsonObject& jsonobj, QObject* obj
             continue;
         }
         QMetaProperty metaproperty = metaobject->property(pIdx);
-        const QMetaType metaType = metaproperty.metaType();
+        #if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+        QMetaType metaType = metaproperty.metaType();
+        #else
+        QMetaType metaType = QMetaType(metaproperty.userType());
+        #endif
         const int type = metaType.id();
         QJsonValue val = iter.value();
         QVariant v(iter.value());

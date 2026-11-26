@@ -9,6 +9,7 @@
 #include <QtCore/QJsonParseError>
 #include <QFile>
 #include <QDebug>
+#include "qjsonserializable.h"
 
 class QObjectHelper::QObjectHelperPrivate {
 };
@@ -23,28 +24,24 @@ QObjectHelper::~QObjectHelper()
   delete d;
 }
 
-
-
 /**
 * This method converts a QObject instance into a QJsonObject.
 *
 * @param object The QObject instance to be converted.
-* @param ignoredProperties Properties that won't be converted.
 */
-QJsonObject QObjectHelper::qobject2qjsonobject( const QObject* object,
-                              const QStringList& ignoredProperties)
+QJsonObject QObjectHelper::qobject2qjsonobject( const QObject* object)
 {
     QJsonObject result;
     if (!object)
         return result;
 
-    const QMetaObject *metaobject = object->metaObject();
-    int count = metaobject->propertyCount();
+    const QMetaObject *metaObject = object->metaObject();
+    int count = metaObject->propertyCount();
     for (int i=0; i<count; ++i) {
-        QMetaProperty metaproperty = metaobject->property(i);
+        QMetaProperty metaproperty = metaObject->property(i);
         const char *name = metaproperty.name();
 
-        if (ignoredProperties.contains(QLatin1String(name)) || (!metaproperty.isReadable()) || name == QLatin1String("ignoredProperties"))
+        if ((!metaproperty.isStored()) || (!metaproperty.isReadable()) || name == QLatin1String("objectName"))
             continue;
 
         QVariant value = object->property(name);
@@ -67,20 +64,19 @@ QJsonObject QObjectHelper::qobject2qjsonobject( const QObject* object,
     return result;
 }
 
-QVariantMap QObjectHelper::qobject2variantmap(const QObject* object,
-                                              const QStringList& ignoredProperties)
+QVariantMap QObjectHelper::qobject2variantmap(const QObject* object)
 {
     QVariantMap result;
     if (!object) return result;
 
-    const QMetaObject* metaobject = object->metaObject();
-    int count = metaobject->propertyCount();
+    const QMetaObject* metaObject = object->metaObject();
+    int count = metaObject->propertyCount();
 
     for (int i = 0; i < count; ++i) {
-        QMetaProperty metaproperty = metaobject->property(i);
+        QMetaProperty metaproperty = metaObject->property(i);
         const char* name = metaproperty.name();
 
-        if (ignoredProperties.contains(QLatin1String(name)) || (!metaproperty.isReadable()) || name == QLatin1String("ignoredProperties"))
+        if ((!metaproperty.isStored()) || (!metaproperty.isReadable()) || name == QLatin1String("objectName"))
             continue;
 
         QVariant value = object->property(name);
@@ -121,12 +117,11 @@ QVariantMap QObjectHelper::qobject2variantmap(const QObject* object,
 * This method converts a QObject instance into a json string.
 *
 * @param object The QObject instance to be converted.
-* @param ignoredProperties Properties that won't be converted.
 */
-QString QObjectHelper::qobject2json(const QObject *object, const QStringList &ignoredProperties)
+QString QObjectHelper::qobject2json(const QObject *object)
 {
     QString result("");
-    QJsonObject jsonobj = QObjectHelper::qobject2qjsonobject(object, ignoredProperties);
+    QJsonObject jsonobj = QObjectHelper::qobject2qjsonobject(object);
     QJsonDocument doc(jsonobj);
     return doc.toJson(QJsonDocument::Compact);
 }
@@ -140,21 +135,30 @@ QString QObjectHelper::qobject2json(const QObject *object, const QStringList &ig
 */
 void QObjectHelper::qjsonobject2qobject(const QJsonObject& jsonobj, QObject* object)
 {
-    const QMetaObject *metaobject = object->metaObject();
+    if(jsonobj.isEmpty()){
+        qWarning()<<"jsonobj is empty";
+        return;
+    }
+    if(object == nullptr){
+        qWarning()<<"object is nullptr";
+        return;
+    }
+    const QMetaObject *metaObject = object->metaObject();
     QJsonObject::const_iterator iter;
     for (iter = jsonobj.constBegin(); iter != jsonobj.constEnd(); ++iter) {
-        int pIdx = metaobject->indexOfProperty(iter.key().toLatin1());
+        int pIdx = metaObject->indexOfProperty(iter.key().toLatin1());
 
         if (pIdx < 0) {
             continue;
         }
-        QMetaProperty metaproperty = metaobject->property(pIdx);
+        QMetaProperty metaproperty = metaObject->property(pIdx);
         #if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
         QMetaType metaType = metaproperty.metaType();
         #else
         QMetaType metaType = QMetaType(metaproperty.userType());
         #endif
         const int type = metaType.id();
+        auto metaTypeObj = metaType.metaObject();
         QJsonValue val = iter.value();
         QVariant v(iter.value());
         // 传入其中所有的UserType 都继承QJsonSerializable类
@@ -165,7 +169,7 @@ void QObjectHelper::qjsonobject2qobject(const QJsonObject& jsonobj, QObject* obj
 
             /// @brief 对象字段优先走属性专用 FromJson。
             ///属性为 Q_PROPERTY_LIST_AUTO
-            if (type >= QMetaType::User || type == QMetaType::UnknownType){
+            if (metaType.name() == QByteArrayLiteral("QList<QObject*>")){
                 QByteArray methodName = iter.key().toLatin1() + "FromJson";
                 bool ok = QMetaObject::invokeMethod(object, methodName.constData(),Q_ARG(QJsonArray, jsonArray));
                 if (ok) {
@@ -196,7 +200,7 @@ void QObjectHelper::qjsonobject2qobject(const QJsonObject& jsonobj, QObject* obj
                     metaproperty.write(object, jsonArray);
                 }
             }
-        }else if (type >= QMetaType::User) {
+        }else if (metaTypeObj && metaTypeObj->inherits(&QJsonSerializable::staticMetaObject)) {
             /// @brief 对象字段优先走属性专用 FromJson。
             ///属性为 Q_PROPERTY_OBJECT
             QByteArray methodName = iter.key().toLatin1() + "FromJson";
@@ -254,12 +258,12 @@ void QObjectHelper::json2qobject(const QString &json, QObject *object)
     }
 }
 
-bool QObjectHelper::save(const QObject *object, const QString &fpath, const QStringList &ignoredProperties)
+bool QObjectHelper::save(const QObject *object, const QString &fpath)
 {
     bool ret = false;
     QFile f(fpath);
     if (f.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
-        QString json = QObjectHelper::qobject2json(object, ignoredProperties);
+        QString json = QObjectHelper::qobject2json(object);
         f.write(json.toUtf8());
         ret = true;
     } else {

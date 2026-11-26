@@ -2,6 +2,7 @@
 
 #include <QtCore>
 #include <QDebug>
+#include "qpropertyex.h"
 #include "qobjecthelper.h"
 
 
@@ -14,22 +15,9 @@
 class QJsonSerializable : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(QStringList ignoredProperties READ ignoredProperties WRITE setIgnoredProperties)
 
 public:
     Q_INVOKABLE explicit QJsonSerializable(QObject *parent = nullptr);
-
-    /**
-     * @brief 获取在序列化时被忽略的属性列表
-     * @return 忽略的属性名列表（默认包含 "objectName"）
-     */
-    QStringList ignoredProperties() const;
-
-    /**
-     * @brief 设置在序列化时要忽略的属性列表
-     * @param list 属性名列表
-     */
-    void setIgnoredProperties(const QStringList& list);
 
     // =========================================================================
     // 对象克隆 (Object Cloning)
@@ -47,7 +35,7 @@ public:
     T* clone(QObject* parent = nullptr)
     {
         T* obj = new T(parent);
-        obj->fromVariantMap(this->variantMap(false));
+        obj->fromVariantMap(this->variantMap());
         return obj;
     }
 
@@ -57,38 +45,34 @@ public:
 
     /**
      * @brief 序列化对象为 JSON 字符串
-     * @param applyIgnore 是否应用 ignoredProperties 来过滤忽略的属性，默认为 true
      * @return 序列化后的 JSON 字符串
      */
-    inline QString json(bool applyIgnore = true) {
-        return QObjectHelper::qobject2json(this, applyIgnore ? m_ignoredProperties : QStringList());
+    inline QString json() {
+        return QObjectHelper::qobject2json(this);
     }
 
     /**
      * @brief 序列化对象为 QJsonObject
-     * @param applyIgnore 是否应用 ignoredProperties 来过滤忽略的属性，默认为 true
      * @return 序列化后的 QJsonObject
      */
-    inline QJsonObject jsonObject(bool applyIgnore = true) {
-        return QObjectHelper::qobject2qjsonobject(this, applyIgnore ? m_ignoredProperties : QStringList());
+    inline QJsonObject jsonObject() {
+        return QObjectHelper::qobject2qjsonobject(this);
     }
 
     /**
      * @brief 序列化对象为 QVariantMap
-     * @param applyIgnore 是否应用 ignoredProperties 来过滤忽略的属性，默认为 true
      * @return 序列化后的 QVariantMap
      */
-    Q_INVOKABLE inline QVariantMap variantMap(bool applyIgnore = true) {
-        return QObjectHelper::qobject2variantmap(this, applyIgnore ? m_ignoredProperties : QStringList());
+    Q_INVOKABLE inline QVariantMap variantMap() {
+        return QObjectHelper::qobject2variantmap(this);
     }
 
     /**
      * @brief 将对象序列化为二进制字节流 (UTF-8 编码的 JSON)
-     * @param applyIgnore 是否应用 ignoredProperties 来过滤忽略的属性，默认为 true
      * @return 紧凑格式的 JSON 字节流
      */
     inline QByteArray toByteArray(bool applyIgnore = true) {
-        return QJsonDocument(jsonObject(applyIgnore)).toJson(QJsonDocument::Compact);
+        return QJsonDocument(jsonObject()).toJson(QJsonDocument::Compact);
     }
 
     // =========================================================================
@@ -153,7 +137,6 @@ protected:
 
 protected:
     bool loadFinish_{true};
-    QStringList m_ignoredProperties;
 
 private:
     friend QDebug operator<<(QDebug dbg, const QJsonSerializable &obj);

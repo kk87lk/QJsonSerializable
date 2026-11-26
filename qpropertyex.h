@@ -1,10 +1,13 @@
-#pragma once
+﻿#pragma once
 #include <QMetaType>
 #include <QQmlProperty>
 #include <QQmlListProperty>
 
-#define Q_PROPERTY_AUTO(TYPE, NAME)                                                     \
-Q_PROPERTY(TYPE NAME READ NAME WRITE set##NAME NOTIFY NAME##Changed)                    \
+#define Q_PROPERTY_AUTO(TYPE, NAME) \
+Q_PROPERTY_AUTO_STORED(TYPE, NAME, true)
+
+#define Q_PROPERTY_AUTO_STORED(TYPE, NAME, STORE)                                           \
+Q_PROPERTY(TYPE NAME READ NAME WRITE set##NAME NOTIFY NAME##Changed STORED STORE)       \
     public:                                                                             \
     Q_SIGNAL void NAME##Changed(const TYPE &);                                          \
     TYPE NAME() const {                                                                 \
@@ -21,8 +24,11 @@ Q_PROPERTY(TYPE NAME READ NAME WRITE set##NAME NOTIFY NAME##Changed)            
 
 // QObject 指针型自动属性（Qt 5 / QML 安全）
 // 适用于 Type : QObject
-#define Q_PROPERTY_AUTO_P(TYPE, M)                                                                 \
-    Q_PROPERTY(TYPE M MEMBER m_##M NOTIFY M##Changed)                                              \
+#define Q_PROPERTY_AUTO_P(TYPE, M) \
+Q_PROPERTY_AUTO_P_STORED(TYPE, M, true)
+
+#define Q_PROPERTY_AUTO_P_STORED(TYPE, M, STORE)                                                                 \
+    Q_PROPERTY(TYPE M MEMBER m_##M NOTIFY M##Changed STORED STORE)                                              \
 public:                                                                                            \
     Q_SIGNAL void M##Changed();                                                                    \
     void M(TYPE in_##M) {                                                                          \
@@ -38,8 +44,11 @@ private:                                                                        
     TYPE m_##M = nullptr;
 
 
-#define Q_PROPERTY_AUTOINIT(TYPE, NAME, DEFAULT_VALUE)                                  \
-Q_PROPERTY(TYPE NAME READ NAME WRITE set##NAME NOTIFY NAME##Changed)                    \
+#define Q_PROPERTY_AUTOINIT(TYPE, NAME, DEFAULT_VALUE) \
+Q_PROPERTY_AUTOINIT_STORED(TYPE, NAME, DEFAULT_VALUE, true)
+
+#define Q_PROPERTY_AUTOINIT_STORED(TYPE, NAME, DEFAULT_VALUE, STORE)                        \
+Q_PROPERTY(TYPE NAME READ NAME WRITE set##NAME NOTIFY NAME##Changed STORED STORE)       \
     public:                                                                             \
     Q_SIGNAL void NAME##Changed(const TYPE &);                                          \
     TYPE NAME() const {                                                                 \
@@ -54,8 +63,11 @@ Q_PROPERTY(TYPE NAME READ NAME WRITE set##NAME NOTIFY NAME##Changed)            
     private:                                                                            \
     TYPE m_##NAME{DEFAULT_VALUE};
 
-#define Q_PROPERTY_AUTOGEN_VIRTUAL(TYPE, NAME, DEFAULT_VALUE)                           \
-Q_PROPERTY(TYPE NAME READ NAME WRITE set##NAME NOTIFY NAME##Changed)                    \
+#define Q_PROPERTY_AUTOGEN_VIRTUAL(TYPE, NAME, DEFAULT_VALUE) \
+Q_PROPERTY_AUTOGEN_VIRTUAL_STORED(TYPE, NAME, DEFAULT_VALUE, true)
+
+#define Q_PROPERTY_AUTOGEN_VIRTUAL_STORED(TYPE, NAME, DEFAULT_VALUE, STORE)                 \
+Q_PROPERTY(TYPE NAME READ NAME WRITE set##NAME NOTIFY NAME##Changed STORED STORE)       \
     public:                                                                             \
     Q_SIGNAL void NAME##Changed(const TYPE &);                                          \
     virtual TYPE NAME() const {                                                         \
@@ -83,8 +95,11 @@ Q_PROPERTY(TYPE NAME READ NAME WRITE set##NAME NOTIFY NAME##Changed)            
  * 7. 适用于 TYPE 继承 QJsonSerializable / QObjectHelper 体系的工程化数据模型。
  *
  */
-#define Q_PROPERTY_QML(TYPE, NAME)                                                          \
-    Q_PROPERTY(QVariantMap NAME READ get##NAME WRITE set##NAME NOTIFY NAME##Changed)        \
+#define Q_PROPERTY_QML(TYPE, NAME) \
+Q_PROPERTY_QML_STORED(TYPE, NAME, true)
+
+#define Q_PROPERTY_QML_STORED(TYPE, NAME, STORE)                                                \
+    Q_PROPERTY(QVariantMap NAME READ get##NAME WRITE set##NAME NOTIFY NAME##Changed STORED STORE)\
     public:                                                                                 \
     Q_SIGNAL void NAME##Changed();                                                          \
     QVariantMap get##NAME() {                                                               \
@@ -115,8 +130,11 @@ Q_PROPERTY(TYPE NAME READ NAME WRITE set##NAME NOTIFY NAME##Changed)            
     private:                                                                                \
     TYPE* m_##NAME = nullptr;
 
-#define Q_PROPERTY_OBJECT(TYPE, NAME)                                      \
-    Q_PROPERTY(TYPE* NAME READ get##NAME WRITE set##NAME NOTIFY NAME##Changed) \
+#define Q_PROPERTY_OBJECT(TYPE, NAME) \
+Q_PROPERTY_OBJECT_STORED(TYPE, NAME, true)
+
+#define Q_PROPERTY_OBJECT_STORED(TYPE, NAME, STORE)                                      \
+    Q_PROPERTY(TYPE* NAME READ get##NAME WRITE set##NAME NOTIFY NAME##Changed STORED STORE)\
 public:                                                                     \
     Q_SIGNAL void NAME##Changed();                                          \
     TYPE* get##NAME() {                                                     \
@@ -147,137 +165,6 @@ public:                                                                     \
     }                                                                       \
 private:                                                                    \
     TYPE* m_##NAME = nullptr;
-
-
-
-// 宏名称：Q_PROPERTY_QMLLIST(TYPE, NAME)
-// 用途：
-//   为 QObject 类快速生成“JSON数组 + 对象列表 + QML可调用CRUD接口”的完整数据模型封装。
-//
-// 设计目标：
-//   1. 对外只暴露 QJsonArray / QVariantMap，不暴露 C++ 指针，保证接口安全与稳定；
-//   2. 内部使用 QList<TYPE*> 保存强类型对象，便于业务逻辑操作；
-//   3. 自动完成 JSON ↔ 对象列表 的双向同步；
-//   4. 自动生成可在 QML 中调用的标准 CRUD 接口，支持表格编辑、参数弹窗、配置持久化等场景。
-//
-// 核心能力：
-//   ① JSON → 对象列表
-//      - 通过 setNAME(QJsonArray) 重建 QList<TYPE*>；
-//      - 每个元素调用 TYPE::fromJsonValue() 反序列化。
-//   ② 对象列表 → JSON
-//      - 通过 syncNAME() 将 QList<TYPE*> 序列化为 QJsonArray；
-//      - 每个元素调用 TYPE::jsonObject()。
-//   ③ QML 侧 CRUD（基于 QVariantMap，不暴露指针）
-//      - NAMECount()        : 获取元素数量
-//      - NAMEGetAt(index)     : 以 QVariantMap 形式获取指定项
-//      - NAMESetAt(index,map) : 修改指定项
-//      - NAMEAppend(map)      : 追加一项
-//      - NAMEInsert(index,map): 插入一项
-//      - NAMERemove(index)    : 删除一项
-//      - NAMEClear()          : 清空列表
-//
-// 使用效果：
-//   - C++：强类型对象管理 + 自动序列化
-//   - QML：像操作 JS 数组一样操作业务数据（但具备持久化与同步能力）
-//   - 非常适合：参数编辑器、配置表格、网络接口映射、工业设备点表管理等场景。
-#define Q_PROPERTY_QMLLIST(TYPE, NAME)                                                      \
-    Q_PROPERTY(QJsonArray NAME READ get##NAME WRITE set##NAME NOTIFY NAME##Changed)         \
-public:                                                                                     \
-    Q_SIGNAL void NAME##Changed();                                                          \
-    /* JSON 读 */                                                                           \
-    QJsonArray get##NAME() const {                                                          \
-        return m_##NAME##Json;                                                              \
-    }                                                                                       \
-    /* JSON 写 -> 重建对象列表 */                                                           \
-    void set##NAME(const QJsonArray &value) {                                               \
-        qDebug() << "[Q_PROPERTY_QMLLIST] set" << #NAME << "size:" << value.size();          \
-        if (m_##NAME##Json == value)                                                        \
-            return;                                                                         \
-        m_##NAME##Json = value;                                                             \
-        NAME##Deserialization();                                                            \
-        emit NAME##Changed();                                                               \
-    }                                                                                       \
-    /* 同步对象 -> JSON */                                                                  \
-    void NAME##Serialization() {                                                            \
-        qDebug() << "[Q_PROPERTY_QMLLIST] Serialization" << #NAME << "count:" << m_##NAME.size(); \
-        QJsonArray newJson;                                                                 \
-        for (const auto &item : m_##NAME) {                                                 \
-            newJson.append(item->jsonObject());                                             \
-        }                                                                                   \
-        m_##NAME##Json = newJson;                                                           \
-        emit NAME##Changed();                                                               \
-    }                                                                                       \
-    /* 同步JSON -> 对象*/                                                                   \
-    void NAME##Deserialization() {                                                          \
-        qDebug() << "[Q_PROPERTY_QMLLIST] Deserialization" << #NAME << "size:" << m_##NAME##Json.size(); \
-        for (const auto &item : m_##NAME) {                                                 \
-            item->deleteLater();                                                            \
-        }                                                                                   \
-        m_##NAME.clear();                                                                   \
-        for (const auto &obj : m_##NAME##Json) {                                            \
-            TYPE* item = new TYPE(this);                                                    \
-            item->fromJsonValue(obj);                                                       \
-            m_##NAME.append(item);                                                          \
-        }                                                                                   \
-    }                                                                                       \
-    /* ---------------- 查询类接口 ---------------- */                                       \
-    Q_INVOKABLE int NAME##IndexOf(const QVariantMap &map) const {                           \
-        for (int i = 0; i < m_##NAME.size(); ++i) {                                         \
-            if (m_##NAME.at(i)->variantMap() == map)                                        \
-                return i;                                                                  \
-        }                                                                                  \
-        return -1;                                                                         \
-    }                                                                                      \
-    Q_INVOKABLE bool NAME##Contains(const QVariantMap &map) const {                         \
-        return NAME##IndexOf(map) >= 0;                                                     \
-    }                                                                                       \
-    /* ---------------- CRUD (统一命名风格) ---------------- */                               \
-    Q_INVOKABLE int NAME##Count() const {                                                   \
-        return m_##NAME.size();                                                             \
-    }                                                                                       \
-    Q_INVOKABLE QVariantMap NAME##GetAt(int index) const {                                  \
-        if (index < 0 || index >= m_##NAME.size())                                          \
-            return QVariantMap();                                                           \
-        return m_##NAME.at(index)->variantMap();                                            \
-    }                                                                                       \
-    Q_INVOKABLE void NAME##SetAt(int index, const QVariantMap &map) {                       \
-        if (index < 0 || index >= m_##NAME.size())                                          \
-            return;                                                                         \
-        TYPE *item = m_##NAME.at(index);                                                    \
-        item->fromVariantMap(map);                                                          \
-        NAME##Serialization();                                                              \
-    }                                                                                       \
-    Q_INVOKABLE void NAME##Append(QVariantMap map = QVariantMap()) {                        \
-        TYPE *item = new TYPE(this);                                                        \
-        item->fromVariantMap(map);                                                          \
-        m_##NAME.append(item);                                                              \
-        NAME##Serialization();                                                              \
-    }                                                                                       \
-    Q_INVOKABLE void NAME##Insert(int index, const QVariantMap &map) {                      \
-        TYPE *item = new TYPE(this);                                                        \
-        item->fromVariantMap(map);                                                          \
-        if (index < 0) index = 0;                                                           \
-        if (index > m_##NAME.size()) index = m_##NAME.size();                               \
-        m_##NAME.insert(index, item);                                                       \
-        NAME##Serialization();                                                              \
-    }                                                                                       \
-    Q_INVOKABLE void NAME##Remove(int index) {                                              \
-        if (index < 0 || index >= m_##NAME.size())                                          \
-            return;                                                                         \
-        TYPE* item = m_##NAME.takeAt(index);                                                \
-        if (item) item->deleteLater();                                                      \
-        NAME##Serialization();                                                              \
-    }                                                                                       \
-    Q_INVOKABLE void NAME##Clear() {                                                        \
-        for (auto *item : m_##NAME) {                                                       \
-            item->deleteLater();                                                            \
-        }                                                                                   \
-        m_##NAME.clear();                                                                   \
-        NAME##Serialization();                                                              \
-    }                                                                                       \
-public:                                                                                   \
-    QList<TYPE*> m_##NAME;                                                                  \
-    QJsonArray m_##NAME##Json;
 
 /**
  * @brief Qt 5.15 的 QML 列表属性宏（QQmlListProperty 静态函数实现版）
@@ -317,9 +204,12 @@ public:                                                                         
  * @param TYPE 列表元素类型（如 FilterCard）
  * @param NAME 列表属性名（如 filterCardList）
  */
+#define Q_PROPERTY_LIST_AUTO(TYPE, NAME) \
+Q_PROPERTY_LIST_AUTO_STORED(TYPE, NAME, true)
 
-#define Q_PROPERTY_LIST_AUTO(TYPE, NAME)                                                    \
-    Q_PROPERTY(QList<QObject*> NAME READ NAME##QML NOTIFY NAME##Changed)                    \
+#define Q_PROPERTY_LIST_AUTO_STORED(TYPE, NAME, STORE)                                                    \
+    Q_CLASSINFO("JsonList_"#NAME, "true") \
+    Q_PROPERTY(QList<QObject*> NAME READ NAME##QML NOTIFY NAME##Changed STORED STORE)       \
 public:                                                                                     \
     Q_SIGNAL void NAME##Changed();                                                          \
     /* 只读暴露给 QML（QML 当 var 用） */                                                     \

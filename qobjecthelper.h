@@ -27,29 +27,23 @@ public:
     /**
      * @brief 将 QObject 对象转换为 QJsonObject
      * @param object 待转换的 QObject 对象指针
-     * @param ignoredProperties 需要忽略不进行序列化的属性名列表（默认为 "objectName"）
      * @return 转换后得到的 QJsonObject
      */
-    static QJsonObject qobject2qjsonobject(const QObject* object,
-                                           const QStringList& ignoredProperties = QStringList() << QString(QLatin1String("objectName")));
+    static QJsonObject qobject2qjsonobject(const QObject* object);
 
     /**
      * @brief 将 QObject 对象转换为 QVariantMap
      * @param object 待转换的 QObject 对象指针
-     * @param ignoredProperties 需要忽略不进行序列化的属性名列表（默认为 "objectName"）
      * @return 转换后得到的 QVariantMap
      */
-    static QVariantMap qobject2variantmap(const QObject* object,
-                                          const QStringList& ignoredProperties = QStringList() << QString(QLatin1String("objectName")));
+    static QVariantMap qobject2variantmap(const QObject* object);
 
     /**
      * @brief 将 QObject 对象转换为 JSON 字符串格式
      * @param object 待转换的 QObject 对象指针
-     * @param ignoredProperties 需要忽略不进行序列化的属性名列表（默认为 "objectName"）
      * @return 转换后得到的 JSON 字符串
      */
-    static QString qobject2json(const QObject* object,
-                                const QStringList& ignoredProperties = QStringList() << QString(QLatin1String("objectName")));
+    static QString qobject2json(const QObject* object);
 
 
     // =========================================================================
@@ -79,11 +73,9 @@ public:
      * @brief 将 QObject 对象的内容序列化后写入到指定文件中
      * @param object 待写入的 QObject 对象指针
      * @param fpath 目标文件路径
-     * @param ignoredProperties 需要忽略不进行序列化的属性名列表（默认为 "objectName"）
      * @return 保存成功返回 true，否则返回 false
      */
-    static bool save(const QObject* object, const QString& fpath,
-                     const QStringList& ignoredProperties = QStringList() << QString(QLatin1String("objectName")));
+    static bool save(const QObject* object, const QString& fpath);
 
     /**
      * @brief 从指定文件加载 JSON 字符串并反序列化到指定的 QObject 对象中
